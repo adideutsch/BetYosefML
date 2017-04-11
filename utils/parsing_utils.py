@@ -95,16 +95,13 @@ def get_all_relevant_references(data, brackets_occurrences, acknowledged_sources
     remaining = data
     words = []
     for index, occ in enumerate(brackets_occurrences):
-        occ_words = occ.strip("()").split(" ")
-        # print("calculate occurrence %d of %d (reference_indexes size is %4f)" % (index, len(brackets_occurrences), float(len(list(reference_indexes.keys())))/(index+1)))
+        # occ_words = occ.strip("()").split(" ")
         occ_index = remaining.find(occ)  # O(n)
         before = remaining[:occ_index]  # O(1)
         for word in before.split(" ")[1:-1]:
             words.append(word)
         reference_indexes[len(words)] = occ
         remaining = remaining[occ_index + len(occ):]
-        # if random() > 0.999:
-        #     print("%s out of %s" % (index, len(brackets_occurrences)))
 
 
     num_cores = multiprocessing.cpu_count()
@@ -115,14 +112,15 @@ def get_all_relevant_references(data, brackets_occurrences, acknowledged_sources
         if reference is not None:
             final_references[reference[0]] = reference[2]
 
-
-    # import pdb; pdb.set_trace()
-    example = list(final_references.keys())[0]
-    print("Example #1: at %d: %s (~%s) %s" % (
-    example, " ".join(words[example - bag_size: example]), final_references[example],
-    " ".join(words[example: example + bag_size])))
-    print()
-    print("%d references!" % (len(final_references.keys())))
+    random_example_index = int(random() * len(list(final_references.keys())))
+    example = list(final_references.keys())[random_example_index]
+    if random() > 0.8:
+        print("Example #%d: at %d: %s (~%s) %s" % (random_example_index,
+                                                   example,
+                                                   " ".join(words[example - bag_size: example]),
+                                                   final_references[example],
+                                                   " ".join(words[example: example + bag_size])))
+    # print("%d references!" % (len(final_references.keys())))
     return final_references, words
 
 # @timed_task
@@ -134,7 +132,6 @@ def create_references(reference_indexes, words, bag_size):
         label = reference_indexes[index]
         bag_of_words = words[index - BAG_OF_WORDS: index + BAG_OF_WORDS]
         references.append(Reference.Reference(index, label, bag_of_words, bag_size))
-    print("Reference example: %s" % (str(references[0])))
     return references
 
 @timed_task
@@ -165,9 +162,9 @@ def create_ml_dataset(references, ref_words, bag_size):
                 bag_of_words_vector[ref_word_to_index[word]] = 1
         reference.bag_of_words_vector = bag_of_words_vector
         if sum(bag_of_words_vector) > bag_size * 2:
-                print("at %d got %d" % (reference.index, sum(bag_of_words_vector)))
+                print("At %d got %d" % (reference.index, sum(bag_of_words_vector)))
     dataset = pandas.Series(map(lambda reference: reference.bag_of_words_vector, references))
-    print("%s references!" % (len(dataset)))
+    print("Found %s references!" % (len(dataset)))
     return dataset
 
 @timed_task
@@ -175,8 +172,7 @@ def create_ml_dataset(references, ref_words, bag_size):
 def create_ml_labels(ref_labels, references):
     labels_list = list(map(lambda reference: ref_labels.index(reference.label), references))
     labels = pandas.Series(labels_list)
-    print("labels:")
-    print("%s" % (", ".join(map(str, list(enumerate(ref_labels))))))
+    print("Labels: %s" % (", ".join(map(str, list(enumerate(ref_labels))))))
     return labels, labels_list
 
 @timed_task
@@ -195,9 +191,9 @@ def split_dataset(dataset, labels, testset_factor):
     return train_dataset, train_labels, test_dataset, test_labels
 
 def build_ml_dataset_subroutine(data, brackets_occurrences, acknowledged_sources, bag_size):
-    # 4 - Omit all irrelevant references and use only those with the popular labels
+    # Omit all irrelevant references and use only those with the popular labels
     reference_indexes, words = get_all_relevant_references(data, brackets_occurrences, acknowledged_sources, bag_size)
-    # 5 - Create the reference objects
+    # Create the reference objects
     references = create_references(reference_indexes, words, bag_size)
     return references
 
@@ -215,33 +211,28 @@ def build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
     else:
         references = build_ml_dataset_subroutine(data, brackets_occurrences, acknowledged_sources, bag_size)
 
-    # 6 - Calculate some metadata regarding the references
+    # Calculate some metadata regarding the references
     ref_words, ref_labels, unique_words = get_references_metadata(references)
     print("Out of %d references we have %d unique words!" % (len(references), unique_words))
     print("Out of %d original labels we have %d unique labels!" % (len(acknowledged_sources), len(ref_labels)))
-    # 7 - Create an sklearn-compatible dataset for classification algorithms
+    # Create an sklearn-compatible dataset for classification algorithms
     dataset = create_ml_dataset(references, ref_words, bag_size)
-    # 8 - Create an sklearn-compatible labels vector for classification algorithms
+    # Create an sklearn-compatible labels vector for classification algorithms
     labels, labels_list = create_ml_labels(acknowledged_sources, references)
 
-    # import pdb; pdb.set_trace()
-    # dataset = pandas.concat(list(map(lambda result: result[0], results)), ignore_index=True)
-    # labels = pandas.concat(list(map(lambda result: result[1], results)), ignore_index=True)
-    # labels_list = reduce(lambda x,y: x + y, map(lambda result: result[2], results))
-    print("INNER: %s, %s, %s" % (str(type(dataset)), str(type(labels)), str(type(labels_list))))
     return dataset, labels, labels_list
 
 @timed_task
 def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_label_frequency, bag_size, testset_factor):
 
-    # 1 - Finding all the references
+    # Finding all the references
     brackets_occurrences = get_all_references_as_strings(data)
     print("%d references" % (len(brackets_occurrences)))
 
-    # 2 - Sorting all the references
+    # Sorting all the references
     sorted_keys, reference_frequency = get_sorted_references(brackets_occurrences)
 
-    # 3 - Choosing acknowledged references (only extremely popular ones)
+    # Choosing acknowledged references (only extremely popular ones)
     acknowledged_sources = choose_acknowledged_references(sorted_keys,
                                                           reference_frequency,
                                                           minimum_label_frequency_percentage,
@@ -249,7 +240,7 @@ def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_lab
 
     dataset, labels, labels_list = build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
 
-    # 9 - split the dataset and labels to train set and test set
+    # Split the dataset and labels to train set and test set
     train_dataset, train_labels, test_dataset, test_labels = split_dataset(dataset, labels, testset_factor)
 
     result = (train_dataset, train_labels, test_dataset, test_labels, labels_list)

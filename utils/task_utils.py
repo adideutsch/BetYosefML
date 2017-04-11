@@ -46,7 +46,7 @@ def timed_task(f):
     def wrapper(*args, **kwds):
         stopwatch = StopWatch(f.__name__)
         stopwatch.start()
-        print("Task <%s>:" % (f.__name__))
+        # print("Task <%s>:" % (f.__name__))
         result = f(*args, **kwds)
         print("Task <%s> took " % (f.__name__), end="")
         stopwatch.stop_and_report()

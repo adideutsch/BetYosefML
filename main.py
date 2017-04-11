@@ -9,7 +9,7 @@ MINIMUM_LABEL_FREQUENCY_PERCENTAGE = 0.005
 MINIMUM_LABEL_FREQUENCY = 100
 
 def main():
-    # GETTING THE DATA
+    # PREPARING THE DATA
     data = parsing_utils.get_raw_data(BETYOSEF_FILENAME)
 
     train_dataset, train_labels, test_dataset, test_labels, labels_list = parsing_utils.parse_data_to_matrices(
@@ -19,8 +19,9 @@ def main():
                                                 BAG_SIZE,
                                                 TESTSET_FACTOR,
                                                 )
-
     classification_data = ml_utils.ClassificationData(train_dataset, train_labels, test_dataset, test_labels)
+
+    # RUNNING ALL THE CLASSIFIERS
     classifiers_runner = ml_utils.ParallelClassifiersRunner(labels_list, test_labels, classification_data)
     classifiers_runner.run()
 
