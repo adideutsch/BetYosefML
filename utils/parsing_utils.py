@@ -68,10 +68,11 @@ def get_sorted_references(brackets_occurrences):
 def choose_acknowledged_references(sorted_keys,
                                    reference_frequency,
                                    minimum_label_frequency_percentage,
-                                   minimum_label_frequency):
+                                   minimum_label_frequency,
+                                   references_blacklist):
     acknowledged_sources = []
     for word in sorted_keys[:int(len(sorted_keys) * minimum_label_frequency_percentage)]:
-        if len(word) > 3 and word in reference_frequency and reference_frequency[word] > minimum_label_frequency:
+        if len(word) > 3 and word in reference_frequency and reference_frequency[word] > minimum_label_frequency and word not in references_blacklist:
             print("Word: <%s>, len: %d, Frequency: %d" % (word, len(word), reference_frequency[word]))
             acknowledged_sources.append(word)
     return acknowledged_sources
@@ -173,6 +174,8 @@ def create_ml_labels(ref_labels, references):
     labels_list = list(map(lambda reference: ref_labels.index(reference.label), references))
     labels = pandas.Series(labels_list)
     print("Labels: %s" % (", ".join(map(str, list(enumerate(ref_labels))))))
+    print("Labels: %s" % ("\", \"".join(map(str, list(ref_labels)))))
+
     return labels, labels_list
 
 @timed_task
@@ -223,7 +226,7 @@ def build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
     return dataset, labels, labels_list
 
 @timed_task
-def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_label_frequency, bag_size, testset_factor):
+def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_label_frequency, bag_size, testset_factor, references_blacklist):
 
     # Finding all the references
     brackets_occurrences = get_all_references_as_strings(data)
@@ -236,7 +239,8 @@ def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_lab
     acknowledged_sources = choose_acknowledged_references(sorted_keys,
                                                           reference_frequency,
                                                           minimum_label_frequency_percentage,
-                                                          minimum_label_frequency)
+                                                          minimum_label_frequency,
+                                                          references_blacklist)
 
     dataset, labels, labels_list = build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
 

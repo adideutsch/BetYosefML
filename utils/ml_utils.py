@@ -21,7 +21,7 @@ CLASSIFIERS = {
     "Neural Net" : MLPClassifier(alpha=1),
     "AdaBoost" : AdaBoostClassifier(),
     "Naive Bayes" : GaussianNB(),
-    "QDA" : QuadraticDiscriminantAnalysis()
+    # "QDA" : QuadraticDiscriminantAnalysis()
     }
 
 
@@ -75,6 +75,7 @@ class ClassifierRunner(threading.Thread):
 
     def run(self):
         # import pdb; pdb.set_trace()
+        # print("RUN %s" % (threading.current_thread()))
         self.classifier.run_classifier()
         # print ("Starting " + self.classifier_name)
         # print ("Exiting " + self.classifier_name)
