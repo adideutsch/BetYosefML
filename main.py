@@ -3,7 +3,7 @@ from utils import parsing_utils, ml_utils
 # CONSTS
 BETYOSEF_FILENAME = "BetYosefData/BetYosef-AllText.txt"
 DEMO_FACTOR = 1
-BAG_SIZE = 5
+BAG_SIZE = 0
 TESTSET_FACTOR = 0.85
 MINIMUM_LABEL_FREQUENCY_PERCENTAGE = 0.5
 MINIMUM_LABEL_FREQUENCY = 30
@@ -11,7 +11,7 @@ REFERENCES_BLACKLIST = ["ברכות",
                         "חולין",
                         "פסחים",
                         "לאוין",
-                        "עירובין",
+                        "עירובין", # first five are blacklisted as they appear so many times they tend to "distract" the classifiers
                         "שו\"ת",
                         "הי\"א",
                         "סי\"ב",
