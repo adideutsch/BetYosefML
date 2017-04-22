@@ -1,4 +1,5 @@
 import threading
+from random import shuffle
 
 from sklearn.neural_network import MLPClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -10,6 +11,8 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn import metrics
+
+MAX_PARALLEL_CLASSIFIERS = 100
 
 CLASSIFIERS = {
     "Nearest Neighbors" : KNeighborsClassifier(n_neighbors = 250),
@@ -104,7 +107,9 @@ class ParallelClassifiersRunner():
         # Start a thread for each classifier
         threads = []
 
-        for classifier_name in CLASSIFIERS.keys():
+        classifiers_names = list(CLASSIFIERS.keys())
+        shuffle(classifiers_names)
+        for classifier_name in classifiers_names[:MAX_PARALLEL_CLASSIFIERS]:
             runner = ClassifierRunner(classifier_name,
                                                CLASSIFIERS[classifier_name],
                                                self.classification_data)
