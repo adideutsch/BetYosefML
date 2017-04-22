@@ -50,7 +50,7 @@ def zero_list_maker(n):
     return [0] * n
 
 @timed_task
-@cached_task
+#@cached_task
 def get_all_references_as_strings(data):
     return re.findall("\([^()]*\)", data)
 
@@ -95,33 +95,46 @@ def get_all_relevant_references(data, brackets_occurrences, acknowledged_sources
     invalids = 0
     remaining = data
     words = []
-    for index, occ in enumerate(brackets_occurrences):
+
+    relevant_occurrences = get_all_references_as_strings(data)
+
+    for index, occ in enumerate(relevant_occurrences):
         # occ_words = occ.strip("()").split(" ")
         occ_index = remaining.find(occ)  # O(n)
+        if occ_index == -1:
+            continue
         before = remaining[:occ_index]  # O(1)
         for word in before.split(" ")[1:-1]:
             words.append(word)
         reference_indexes[len(words)] = occ
         remaining = remaining[occ_index + len(occ):]
+    for word in remaining.split(" ")[1:-1]:
+        words.append(word)
 
 
     num_cores = multiprocessing.cpu_count()
 
 
     final_references = {}
-    for reference in list(Parallel(n_jobs=num_cores)(delayed(analyze_reference)(occ_index, reference_indexes, acknowledged_sources) for occ_index in reference_indexes.keys())):
+    analysed_references = list(Parallel(n_jobs=num_cores)(delayed(analyze_reference)(occ_index, reference_indexes, acknowledged_sources) for occ_index in reference_indexes.keys()))
+    for reference in analysed_references:
         if reference is not None:
             final_references[reference[0]] = reference[2]
 
     random_example_index = int(random() * len(list(final_references.keys())))
-    example = list(final_references.keys())[random_example_index]
-    if random() > 0.8:
+
+    # print("SIZE IS %s with %s analyzed" % (len(list(final_references.keys())), len(analysed_references)))
+
+
+    if random() > 0.7 and len(list(final_references.keys())) > 0:
+        example = list(final_references.keys())[random_example_index]
         print("Example #%d: at %d: %s (~%s) %s" % (random_example_index,
                                                    example,
                                                    " ".join(words[example - bag_size: example]),
                                                    final_references[example],
                                                    " ".join(words[example: example + bag_size])))
     # print("%d references!" % (len(final_references.keys())))
+
     return final_references, words
 
 # @timed_task
@@ -174,7 +187,7 @@ def create_ml_labels(ref_labels, references):
     labels_list = list(map(lambda reference: ref_labels.index(reference.label), references))
     labels = pandas.Series(labels_list)
     print("Labels: %s" % (", ".join(map(str, list(enumerate(ref_labels))))))
-    print("Labels: %s" % ("\", \"".join(map(str, list(ref_labels)))))
+    # print("Labels: %s" % ("\", \"".join(map(str, list(ref_labels)))))
 
     return labels, labels_list
 
@@ -204,20 +217,21 @@ def build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
 
     # X - Check for size, if to big - split
     if len(data) > MAX_DATA_SIZE:
-        parts = int(len(data) / MAX_DATA_SIZE) + 1
+        num_cores = multiprocessing.cpu_count()
+        parts = num_cores
+        # print("Splitting data to %s parts" % (parts))
         part_len = int(len(data) / parts)
         split_data = map(lambda i: data[i * part_len : (i + 1) * part_len], range(parts))
-        num_cores = multiprocessing.cpu_count()
-
-        references = reduce(lambda x,y: x + y, Parallel(n_jobs=num_cores)(delayed(build_ml_dataset_subroutine)(part, brackets_occurrences, acknowledged_sources, bag_size) for part in split_data))
+        parallel_results = Parallel(n_jobs=num_cores)(delayed(build_ml_dataset_subroutine)(part, brackets_occurrences, acknowledged_sources, bag_size) for part in split_data)
+        references = reduce(lambda x,y: x + y, parallel_results)
 
     else:
         references = build_ml_dataset_subroutine(data, brackets_occurrences, acknowledged_sources, bag_size)
 
     # Calculate some metadata regarding the references
     ref_words, ref_labels, unique_words = get_references_metadata(references)
-    print("Out of %d references we have %d unique words!" % (len(references), unique_words))
-    print("Out of %d original labels we have %d unique labels!" % (len(acknowledged_sources), len(ref_labels)))
+    print("Finished with %d relevant references" % (len(references)))
+    print("Finished with %d original labels" % (len(acknowledged_sources)))
     # Create an sklearn-compatible dataset for classification algorithms
     dataset = create_ml_dataset(references, ref_words, bag_size)
     # Create an sklearn-compatible labels vector for classification algorithms

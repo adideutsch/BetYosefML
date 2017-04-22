@@ -2,11 +2,11 @@ from utils import parsing_utils, ml_utils
 
 # CONSTS
 BETYOSEF_FILENAME = "BetYosefData/BetYosef-AllText.txt"
-DEMO_FACTOR = 1
-BAG_SIZE = 0
-TESTSET_FACTOR = 0.85
-MINIMUM_LABEL_FREQUENCY_PERCENTAGE = 0.5
-MINIMUM_LABEL_FREQUENCY = 30
+DEMO_FACTOR = 0.3 # Between 0 to 1
+BAG_SIZE = 5 # Between 0 to 20
+TESTSET_FACTOR = 0.85 # Between 0 to 1
+MINIMUM_LABEL_FREQUENCY_PERCENTAGE = 0.1 # Between 0 to 1
+MINIMUM_LABEL_FREQUENCY = 50 # Between 0 to infinity
 REFERENCES_BLACKLIST = ["ברכות",
                         "חולין",
                         "פסחים",

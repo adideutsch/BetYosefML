@@ -1,9 +1,9 @@
-import functools, pickle, os.path, time
+import functools, pickle, os.path, time, hashlib
 
-CACHE_FILENAME = "parsing_cache.pickle"
+CACHE_FILENAME = "parsing_cache_%s.pickle"
 
 
-class StopWatch():
+class TimeCounter():
     def __init__(self, name):
         self.initial_time = time.time()
         self.name = name
@@ -15,36 +15,38 @@ class StopWatch():
         self.stop()
         print("~%d seconds" % (int(self.interval)))
 
-def load_pickle():
+def load_pickle(call_id):
     # If file doesn't exist create initial one
-    if not os.path.isfile(CACHE_FILENAME):
-        with open(CACHE_FILENAME, 'wb') as fobj:
+    filename = CACHE_FILENAME % (call_id)
+    if not os.path.isfile(filename):
+        with open(filename, 'wb') as fobj:
             pickle.dump({}, fobj, pickle.HIGHEST_PROTOCOL)
 
-    with open(CACHE_FILENAME, 'rb') as fobj:
+    with open(filename, 'rb') as fobj:
         data = pickle.load(fobj)
     return data
 
-def dump_pickle(data):
-    with open(CACHE_FILENAME, 'wb') as fobj:
+def dump_pickle(data, call_id):
+    filename = CACHE_FILENAME % (call_id)
+    with open(filename, 'wb') as fobj:
         pickle.dump(data, fobj, pickle.HIGHEST_PROTOCOL)
 
 def load_from_cache(call_id):
-    cache = load_pickle()
+    cache = load_pickle(call_id)
     if call_id in cache:
         return cache[call_id]
     else:
         return False
 
 def dump_to_cache(call_id, result):
-    cache = load_pickle()
+    cache = load_pickle(call_id)
     cache[call_id] = result
-    dump_pickle(cache)
+    dump_pickle(cache, call_id)
 
 def timed_task(f):
     @functools.wraps(f)
     def wrapper(*args, **kwds):
-        stopwatch = StopWatch(f.__name__)
+        stopwatch = TimeCounter(f.__name__)
         stopwatch.start()
         # print("Task <%s>:" % (f.__name__))
         result = f(*args, **kwds)
@@ -56,7 +58,7 @@ def timed_task(f):
 def cached_task(f):
     @functools.wraps(f)
     def wrapper(*args, **kwds):
-        call_id = (f.__name__, str(args), str(kwds))
+        call_id = hashlib.md5(str((f.__name__, str(args), str(kwds))).encode('utf-8')).hexdigest()
         cache_data = load_from_cache(call_id)
         if cache_data != False:
             print("Task <%s> resolved from cache!" % (f.__name__))

@@ -12,14 +12,14 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn import metrics
 
 CLASSIFIERS = {
-    "Nearest Neighbors" : KNeighborsClassifier(3),
+    "Nearest Neighbors" : KNeighborsClassifier(n_neighbors = 250),
     "Linear SVM" : SVC(kernel="linear", C=0.025),
     "RBF SVM" : SVC(gamma=2, C=1),
     # "Gaussian Process" : GaussianProcessClassifier(1.0 * RBF(1.0), warm_start=True),
-    "Decision Tree" : DecisionTreeClassifier(max_depth=5),
-    "Random Forest" : RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
-    "Neural Net" : MLPClassifier(alpha=1),
-    "AdaBoost" : AdaBoostClassifier(),
+    "Decision Tree" : DecisionTreeClassifier(max_depth=500),
+    "Random Forest" : RandomForestClassifier(max_depth=100, n_estimators=25, max_features='auto'),
+    "Neural Net" : MLPClassifier(),
+    "AdaBoost" : AdaBoostClassifier(n_estimators=250),
     "Naive Bayes" : GaussianNB(),
     # "QDA" : QuadraticDiscriminantAnalysis()
     }
@@ -40,9 +40,11 @@ class Classifier():
         print("Confusion matrix:\n%s" % metrics.confusion_matrix(self.expected, self.predicted))
 
     def run_classifier(self):
-        print("Running %s classifier" % (self.name))
+        print("Running %s classifier, fitting on train dataset" % (self.name))
 
         self.classifier.fit(self.train_dataset, self.train_labels)
+
+        print("%s classifier predicting on test dataset" % (self.name))
         self.predicted = self.classifier.predict(self.test_dataset)
 
         # self.report()
@@ -94,8 +96,9 @@ class ParallelClassifiersRunner():
         # Calculate precision for simply guessing the most popular reference for all the entries
         naive_monkey_ratio = self.labels_list.count(max(set(self.labels_list), key=self.labels_list.count)) / len(self.labels_list)
         naive_monkey_successful_guesses = int(naive_monkey_ratio * len(self.test_labels))
-        print("\"MONKEY\" Classifier would get %s out of %s" % (naive_monkey_successful_guesses, len(self.test_labels)))
-        print("%s labels, %s for the most popular one, %s" % (len(self.labels_list), self.labels_list.count(max(set(self.labels_list), key=self.labels_list.count)), max(set(self.labels_list), key=self.labels_list.count)))
+        print("Dataset consists of %s instances, %s of them belong to the most popular label" % (len(self.labels_list),
+                                                               self.labels_list.count(max(set(self.labels_list), key=self.labels_list.count))))
+        print("Therefore, a naive classifier should get right %s out of %s" % (naive_monkey_successful_guesses, len(self.test_labels)))
 
 
         # Start a thread for each classifier
