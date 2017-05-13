@@ -27,13 +27,17 @@ def get_words_above_frequency(words_frequency, threshold):
 
 @timed_task
 @cached_task
-def build_frequency_dict(data):
+def build_frequency_dict(data, references):
     words_frequency = {}
-    for word in data.split(" "):
-        if word in words_frequency.keys():
-            words_frequency[word] += 1
-        else:
-            words_frequency[word] = 1
+    for reference in references:
+        words_frequency[reference] = len([m.start() for m in re.finditer(reference, data)])
+    #    if random() > 0.6:
+    #        print("count: %s" % (words_frequency[reference]))
+    # for word in data.split(" "):
+        # if word in words_frequency.keys():
+            # words_frequency[word] += 1
+        # else:
+            # words_frequency[word] = 1
     return words_frequency
 
 @timed_task
@@ -54,13 +58,32 @@ def zero_list_maker(n):
 def get_all_references_as_strings(data):
     return re.findall("\([^()]*\)", data)
 
+
+def get_reference_words_subsets(reference):
+    subsets = []
+    words = reference.split(" ")
+    for i in range(len(words)):
+        for j in range(len(words)+1):
+            if j >= i:
+                if words[i:j] != []:
+                    subsets.append(" ".join(words[i:j]))
+    return list(set(subsets))
+
+
 @timed_task
-@cached_task
+# @cached_task
 def get_sorted_references(brackets_occurrences):
     ref_raw_data = " ".join(map(lambda x: x.strip("()"), brackets_occurrences))
-    reference_frequency = build_frequency_dict(ref_raw_data)
+    print("1")
+    references = list(filter(lambda x: '[' not in x and ']' not in x, list(set(reduce(lambda x,y: x+y, map(lambda x: get_reference_words_subsets(x.strip("()")), brackets_occurrences))))))
+
+    reference_frequency = build_frequency_dict(ref_raw_data, references)
     sorted_keys = sorted(reference_frequency, key=reference_frequency.get)
     sorted_keys.reverse()
+    for reference in sorted_keys:
+        if reference_frequency[reference] > 100:
+            print("\"%s\", %s" % (reference, reference_frequency[reference]))
+
     return sorted_keys, reference_frequency
 
 @timed_task
@@ -169,7 +192,7 @@ def create_ml_dataset(references, ref_words, bag_size):
     ref_word_to_index = {}
     for index, word in enumerate(ref_words):
         ref_word_to_index[word] = index
-    for reference in references:
+    for index, reference in enumerate(references):
         bag_of_words_vector = zero_list_maker(len(ref_words))
         for word in reference.get_bag_of_words():
             if word in ref_words:
@@ -192,7 +215,7 @@ def create_ml_labels(ref_labels, references):
     return labels, labels_list
 
 @timed_task
-def split_dataset(dataset, labels, testset_factor):
+def split_dataset(dataset, labels, references, testset_factor):
     train_size = int(len(dataset) * testset_factor)
 
 
@@ -202,9 +225,11 @@ def split_dataset(dataset, labels, testset_factor):
 
     train_dataset = dataset[:train_size]
     train_labels = labels[:train_size]
+    train_references = references[:train_size]
     test_dataset = dataset[train_size:]
     test_labels = labels[train_size:]
-    return train_dataset, train_labels, test_dataset, test_labels
+    test_references = references[train_size:]
+    return train_dataset, train_labels, train_references, test_dataset, test_labels, test_references
 
 def build_ml_dataset_subroutine(data, brackets_occurrences, acknowledged_sources, bag_size):
     # Omit all irrelevant references and use only those with the popular labels
@@ -237,7 +262,7 @@ def build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
     # Create an sklearn-compatible labels vector for classification algorithms
     labels, labels_list = create_ml_labels(acknowledged_sources, references)
 
-    return dataset, labels, labels_list
+    return dataset, labels, references, labels_list
 
 @timed_task
 def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_label_frequency, bag_size, testset_factor, references_blacklist):
@@ -256,10 +281,10 @@ def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_lab
                                                           minimum_label_frequency,
                                                           references_blacklist)
 
-    dataset, labels, labels_list = build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
+    dataset, labels, references, labels_list = build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
 
     # Split the dataset and labels to train set and test set
-    train_dataset, train_labels, test_dataset, test_labels = split_dataset(dataset, labels, testset_factor)
+    train_dataset, train_labels, train_references, test_dataset, test_labels, test_references = split_dataset(dataset, labels, references, testset_factor)
 
-    result = (train_dataset, train_labels, test_dataset, test_labels, labels_list)
+    result = (train_dataset, train_labels, train_references, test_dataset, test_labels, test_references, labels_list, acknowledged_sources)
     return result
