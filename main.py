@@ -5,9 +5,9 @@ import Reference
 BETYOSEF_FILENAME = "BetYosefData/BetYosef-AllText.txt"
 DEMO_FACTOR = 1 # Between 0 to 1
 BAG_SIZE = 5 # Between 0 to 20
-TESTSET_FACTOR = 0.85 # Between 0 to 1
+TESTSET_FACTOR = 0.65 # Between 0 to 1
 MINIMUM_LABEL_FREQUENCY_PERCENTAGE = 0.1 # Between 0 to 1
-MINIMUM_LABEL_FREQUENCY = 100 # Between 0 to infinity
+MINIMUM_LABEL_FREQUENCY = 30 # Between 0 to infinity
 
 
 def main():

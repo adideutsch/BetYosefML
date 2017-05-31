@@ -1,6 +1,8 @@
 import threading
 from random import shuffle
 
+from collections import Counter
+
 from sklearn.neural_network import MLPClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -17,15 +19,48 @@ MAX_SUCCESS_EXAMPLES = 5
 MAX_FAILURE_EXAMPLES = 5
 
 CLASSIFIERS = {
-    # "Nearest Neighbors" : KNeighborsClassifier(n_neighbors = 250),
-    # "Linear SVM" : SVC(kernel="linear", C=0.025),
-    # "RBF SVM" : SVC(gamma=2, C=1),
-    # "Gaussian Process" : GaussianProcessClassifier(1.0 * RBF(1.0), warm_start=True),
-    "Decision Tree" : DecisionTreeClassifier(max_depth=500),
-    "Random Forest" : RandomForestClassifier(max_depth=100, n_estimators=25, max_features='auto'),
-    "Neural Net" : MLPClassifier(),
-    # "AdaBoost" : AdaBoostClassifier(n_estimators=250),
+    #"Nearest Neighbors 100": KNeighborsClassifier(n_neighbors=100),
+    #"Nearest Neighbors 250": KNeighborsClassifier(n_neighbors=250),
+    #"Nearest Neighbors 500": KNeighborsClassifier(n_neighbors=500),
+
+    #"Linear SVM" : SVC(kernel="linear", C=0.025),
+
+    #"RBF SVM" : SVC(gamma=2, C=1),
+
+    #"Gaussian Process" : GaussianProcessClassifier(1.0 * RBF(1.0), warm_start=True),
+
+    "Decision Tree 100": DecisionTreeClassifier(max_depth=100),
+    "Decision Tree 200" : DecisionTreeClassifier(max_depth=200),
+    "Decision Tree 300" : DecisionTreeClassifier(max_depth=300),
+    "Decision Tree 500" : DecisionTreeClassifier(max_depth=500),
+
+    "Random Forest 100/100" : RandomForestClassifier(max_depth=100, n_estimators=100, max_features='auto'),
+    "Random Forest 100/150" : RandomForestClassifier(max_depth=100, n_estimators=150, max_features='auto'),
+    "Random Forest 100/250" : RandomForestClassifier(max_depth=100, n_estimators=250, max_features='auto'),
+    "Random Forest 200/100" : RandomForestClassifier(max_depth=200, n_estimators=100, max_features='auto'),
+    "Random Forest 200/150" : RandomForestClassifier(max_depth=200, n_estimators=150, max_features='auto'),
+    "Random Forest 200/250" : RandomForestClassifier(max_depth=200, n_estimators=250, max_features='auto'),
+    "Random Forest 300/250" : RandomForestClassifier(max_depth=300, n_estimators=250, max_features='auto'),
+    "Random Forest 300/350": RandomForestClassifier(max_depth=300, n_estimators=350, max_features='auto'),
+
+    "lbfgs NN": MLPClassifier(activation='identity', alpha=0.0001, batch_size='auto', shuffle=True,
+                              solver='lbfgs',
+                              warm_start=False),
+
+
+    "Default Neural Net" : MLPClassifier(),
+
+    #"sgd NN" : MLPClassifier(activation='identity', alpha=0.0001, batch_size='auto', shuffle=True,
+    #   solver='sgd',
+    #   warm_start=False),
+
+    #"AdaBoost 100" : AdaBoostClassifier(n_estimators=100),
+    #"AdaBoost 200" : AdaBoostClassifier(n_estimators=200),
+    #"AdaBoost 300" : AdaBoostClassifier(n_estimators=300),
+    #"AdaBoost 500" : AdaBoostClassifier(n_estimators=500),
+
     # "Naive Bayes" : GaussianNB(),
+
     # "QDA" : QuadraticDiscriminantAnalysis()
     }
 
@@ -50,11 +85,12 @@ class Classifier():
     def get_failures_by_label(self):
         report = ""
         sorted_labels = list(self.label_failures.keys())
-        sorted_labels.sort(key=lambda label: len(self.label_failures[label][0]) + len(self.label_failures[label][1]), reverse=True)
+        sorted_labels.sort(key=lambda label: (len(self.label_failures[label][0]) + len(self.label_failures[label][1]) + 1) / (1 + len(self.label_successes[label])), reverse=True)
         for label in sorted_labels:
             false_positives = self.label_failures[label][0]
             false_negatives = self.label_failures[label][1]
             report += "\nlabel %s:\nfalse positives: %3s, false negatives: %3s, successes: %3s\n" % (label, len(false_positives), len(false_negatives), len(self.label_successes[label]))
+            report += "similar labels: %s\n" % (self.similar_labels[label].most_common(5))
         return report
 
     def get_report(self):
@@ -107,21 +143,26 @@ class Classifier():
 
         self.successful = counter
 
+        self.similar_labels = {}
         self.label_failures = {}
         self.label_successes = {}
         for label in self.acknowledged_sources:
+            similar_labels = Counter()
             false_positives = []
             false_negatives = []
             for failure in self.failures:
                 if failure.label == label:
                     false_negatives.append(failure)
+                    similar_labels[failure.prediction] += 1
                 if failure.prediction == label:
                     false_positives.append(failure)
+                    similar_labels[failure.label] += 1
             successful_identifications = []
             for success in self.successes:
                 if success.label == label:
                     successful_identifications.append(success)
             self.label_failures[label] = (false_positives, false_negatives)
+            self.similar_labels[label] = similar_labels
             self.label_successes[label] = successful_identifications
 
         print("%s: %s out of %s" % (self.name, self.successful, len(self.predicted)))
