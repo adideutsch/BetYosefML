@@ -4,13 +4,16 @@ from random import random
 import multiprocessing
 from functools import reduce
 
+import networkx as nx
 import pandas
 
 import Reference
 from utils.task_utils import timed_task, cached_task
+from utils.graph_utils import plot_graph
 
 BAG_OF_WORDS = 20
 MAX_DATA_SIZE = 10 ** 6
+SUPER_CLASSES_MANIPULATION = True
 
 @timed_task
 @cached_task
@@ -71,7 +74,7 @@ def get_reference_words_subsets(reference):
 
 
 @timed_task
-# @cached_task
+@cached_task
 def get_sorted_references(brackets_occurrences):
     ref_raw_data = " ".join(map(lambda x: x.strip("()"), brackets_occurrences))
     references = list(filter(lambda x: '[' not in x and ']' not in x, list(set(reduce(lambda x,y: x+y, map(lambda x: get_reference_words_subsets(x.strip("()")), brackets_occurrences))))))
@@ -100,13 +103,22 @@ def choose_acknowledged_references(sorted_keys,
             acknowledged_sources.append(word)
     return acknowledged_sources
 
-def analyze_reference(occ_index, reference_indexes, acknowledged_sources):
+def analyze_reference(occ_index, reference_indexes, acknowledged_sources, words, bag_size):
     found_sources = []
     occ_words = reference_indexes[occ_index].strip("()").split(" ")
     for source in acknowledged_sources:
-        if source in reference_indexes[occ_index]:
+        bag_of_words = words[occ_index-bag_size: occ_index+bag_size]
+        ###r = random()
+        ###if r > 0.95:
+        ###    print("%s> left: %s" % (r, words[occ_index-4:occ_index]))
+        ###    print("%s> ref: %s" % (r, reference_indexes[occ_index]))
+        ###    print("%s> right: %s" % (r, words[occ_index:occ_index+4]))
+
+        if source in reference_indexes[occ_index] or source in " ".join(bag_of_words):
             found_sources.append(source)
     if len(found_sources) == 1:
+        # if found_sources[0] in " ".join(bag_of_words):
+        #     print("BOOOM!!!: <%s>, <%s>" % (found_sources[0], " ".join(bag_of_words)))
         return (occ_index, reference_indexes[occ_index], found_sources[0])
     else:
         None
@@ -140,7 +152,7 @@ def get_all_relevant_references(data, brackets_occurrences, acknowledged_sources
 
 
     final_references = {}
-    analysed_references = list(Parallel(n_jobs=num_cores)(delayed(analyze_reference)(occ_index, reference_indexes, acknowledged_sources) for occ_index in reference_indexes.keys()))
+    analysed_references = list(Parallel(n_jobs=num_cores)(delayed(analyze_reference)(occ_index, reference_indexes, acknowledged_sources, words, bag_size) for occ_index in reference_indexes.keys()))
     for reference in analysed_references:
         if reference is not None:
             final_references[reference[0]] = reference[2]
@@ -187,22 +199,34 @@ def get_references_metadata(references):
     unique_words = len(ref_words)
     return (ref_words, ref_labels, unique_words)
 
+def create_ref_vector(reference, ref_words, ref_word_to_index, bag_size):
+    bag_of_words_vector = zero_list_maker(len(ref_words))
+    for word in reference.get_bag_of_words():
+        if word in ref_words:
+            bag_of_words_vector[ref_word_to_index[word]] = 1
+    if sum(bag_of_words_vector) > bag_size * 2:
+            print("At %d got %d" % (reference.index, sum(bag_of_words_vector)))
+    return bag_of_words_vector
+
+
 @timed_task
 # @cached_task
 def create_ml_dataset(references, ref_words, bag_size):
     ref_word_to_index = {}
     for index, word in enumerate(ref_words):
         ref_word_to_index[word] = index
-    for index, reference in enumerate(references):
-        bag_of_words_vector = zero_list_maker(len(ref_words))
-        for word in reference.get_bag_of_words():
-            if word in ref_words:
-                bag_of_words_vector[ref_word_to_index[word]] = 1
-        reference.bag_of_words_vector = bag_of_words_vector
-        if sum(bag_of_words_vector) > bag_size * 2:
-                print("At %d got %d" % (reference.index, sum(bag_of_words_vector)))
-    dataset = pandas.Series(map(lambda reference: reference.bag_of_words_vector, references))
-    print("Found %s references!" % (len(dataset)))
+    print("Building references vectors!")
+    # for index, reference in enumerate(references):
+    #     bag_of_words_vector = zero_list_maker(len(ref_words))
+    #     for word in reference.get_bag_of_words():
+    #         if word in ref_words:
+    #             bag_of_words_vector[ref_word_to_index[word]] = 1
+    #     reference.bag_of_words_vector = bag_of_words_vector
+    #     if index % 100 == 0 or sum(bag_of_words_vector) > bag_size * 2:
+    #             print("At %d got %d" % (reference.index, sum(bag_of_words_vector)))
+    # dataset = pandas.Series(map(lambda reference: reference.bag_of_words_vector, references))
+    dataset = pandas.Series(map(lambda reference: create_ref_vector(reference, ref_words, ref_word_to_index, bag_size), references))
+    print("Built %s reference vectors!" % (len(dataset)))
     return dataset
 
 @timed_task
@@ -211,8 +235,9 @@ def create_ml_labels(ref_labels, references):
     labels_list = list(map(lambda reference: ref_labels.index(reference.label), references))
     labels = pandas.Series(labels_list)
     print("Labels: %s" % (", ".join(map(str, list(enumerate(ref_labels))))))
-    # print("Labels: %s" % ("\", \"".join(map(str, list(ref_labels)))))
 
+    final_labels = list(filter(lambda label: label not in reduce(lambda labels, more_labels: labels+more_labels, map(lambda key: Reference.SUPERCLASSES[key], Reference.SUPERCLASSES.keys())), ref_labels))
+    print("%s" % ("\'"+"\',\n\'".join(map(str, list(final_labels)))+"\'"))
     return labels, labels_list
 
 @timed_task
@@ -240,7 +265,6 @@ def build_ml_dataset_subroutine(data, brackets_occurrences, acknowledged_sources
     return references
 
 def build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size):
-
     # X - Check for size, if to big - split
     if len(data) > MAX_DATA_SIZE:
         num_cores = multiprocessing.cpu_count()
@@ -254,6 +278,18 @@ def build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
     else:
         references = build_ml_dataset_subroutine(data, brackets_occurrences, acknowledged_sources, bag_size)
 
+
+    if SUPER_CLASSES_MANIPULATION == True:
+        for superclass in Reference.SUPERCLASSES.keys():
+            acknowledged_sources.append(superclass)
+
+        for reference in references:
+            for superclass in Reference.SUPERCLASSES.keys():
+                labels = Reference.SUPERCLASSES[superclass]
+                if reference.label in labels:
+                    reference.label = superclass
+
+
     # Calculate some metadata regarding the references
     ref_words, ref_labels, unique_words = get_references_metadata(references)
     print("Finished with %d relevant references" % (len(references)))
@@ -265,10 +301,12 @@ def build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
 
     return dataset, labels, references, labels_list
 
-def analyze_reference_frequency(references):
+def analyze_reference_frequency(references, min_intersection_weight, max_intersection_weight):
     word_labels = []
     label_to_word_frequency_dict = {}
+    label_to_top_words = {}
     label_appearances = {}
+    word_appearances = {}
     for reference in references:
         if reference.label not in label_appearances:
             label_to_word_frequency_dict[reference.label] = {}
@@ -280,13 +318,59 @@ def analyze_reference_frequency(references):
                 label_to_word_frequency_dict[reference.label][word] = 0
             label_to_word_frequency_dict[reference.label][word] += 1
     for label in word_labels:
+        # print("Frequency for %s:" % (label))
+        label_word_frequency = label_to_word_frequency_dict[label]
+        sorted_keys = sorted(label_word_frequency, key=label_word_frequency.get)
+        sorted_keys.reverse()
+        label_to_top_words[label] = sorted_keys[:25]
+        for key in sorted_keys[:25]:
+        #     print("%s: %d" % (key, int(100*label_word_frequency[key]/label_appearances[label])))
+            if key not in word_appearances:
+                word_appearances[key] = 0
+            word_appearances[key] += 1
+
+    sorted_top_word_appearances = sorted(word_appearances.keys(), key=word_appearances.get)
+    sorted_top_word_appearances.reverse()
+
+    print("Top frequency 25 words:")
+    for word in sorted_top_word_appearances[:25]:
+        print("%s, %d" % (word, word_appearances[word]))
+
+    for label in word_labels:
         print("Frequency for %s:" % (label))
         label_word_frequency = label_to_word_frequency_dict[label]
         sorted_keys = sorted(label_word_frequency, key=label_word_frequency.get)
         sorted_keys.reverse()
-        for key in sorted_keys[:20]:
-            print("%s: %d" % (key, int(100*label_word_frequency[key]/label_appearances[label])))
+        for key in sorted_keys[:25]:
+            if key not in sorted_top_word_appearances[:25]:
+                print("%s: %d" % (key, int(100*label_word_frequency[key]/label_appearances[label])))
         print()
+
+    for current_threshold in range(min_intersection_weight, max_intersection_weight):
+        G = nx.Graph()
+
+        for label_a in word_labels:
+            for label_b in word_labels:
+                if label_a == label_b or (label_b[::-1], label_a[::-1]) in G.edges():
+                    continue
+                label_a_word_frequency = label_to_word_frequency_dict[label_a]
+                label_a_sorted_keys = sorted(label_a_word_frequency, key=label_a_word_frequency.get)
+                label_a_sorted_keys.reverse()
+                label_b_word_frequency = label_to_word_frequency_dict[label_b]
+                label_b_sorted_keys = sorted(label_b_word_frequency, key=label_b_word_frequency.get)
+                label_b_sorted_keys.reverse()
+
+                intersection_weight = len(set(label_a_sorted_keys[:50]).intersection(set(label_b_sorted_keys[:50])))
+                if intersection_weight > current_threshold  :
+                    if random() > 0.9:
+                        print("add %s-%s with %s" % (label_a, label_b, intersection_weight))
+                    G.add_edge(label_a[::-1], label_b[::-1], weight=intersection_weight)
+
+        all_edges = [(u, v) for (u, v, d) in G.edges(data=True)]
+        all_edges_with_weight = [(u, v, d) for (u, v, d) in G.edges(data=True)]
+
+        filename = "weighted_labels_graph_intersection=%s.png" % (str(current_threshold))
+        plot_graph(G, all_edges, all_edges_with_weight, filename)
 
 @timed_task
 def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_label_frequency, bag_size, testset_factor, references_whitelist):
@@ -307,7 +391,7 @@ def parse_data_to_matrices(data, minimum_label_frequency_percentage, minimum_lab
 
     dataset, labels, references, labels_list = build_ml_dataset(data, brackets_occurrences, acknowledged_sources, bag_size)
 
-    analyze_reference_frequency(references)
+    # analyze_reference_frequency(references, 15, 50)
 
     # Split the dataset and labels to train set and test set
     train_dataset, train_labels, train_references, test_dataset, test_labels, test_references = split_dataset(dataset, labels, references, testset_factor)

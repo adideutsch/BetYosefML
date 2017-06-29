@@ -13,50 +13,61 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn import metrics
+import networkx as nx
+
+from utils.graph_utils import plot_graph, plot_pie_chart, plot_bar_chart
 
 MAX_PARALLEL_CLASSIFIERS = 100
 MAX_SUCCESS_EXAMPLES = 5
 MAX_FAILURE_EXAMPLES = 5
 
 CLASSIFIERS = {
-    #"Nearest Neighbors 100": KNeighborsClassifier(n_neighbors=100),
-    #"Nearest Neighbors 250": KNeighborsClassifier(n_neighbors=250),
-    #"Nearest Neighbors 500": KNeighborsClassifier(n_neighbors=500),
 
-    #"Linear SVM" : SVC(kernel="linear", C=0.025),
+    # "Nearest Neighbors 50": KNeighborsClassifier(n_neighbors=50),
+    # "Nearest Neighbors 10": KNeighborsClassifier(n_neighbors=10),
+    # "Nearest Neighbors 20": KNeighborsClassifier(n_neighbors=20),
+    # "Nearest Neighbors 25": KNeighborsClassifier(n_neighbors=25),
+    # "Nearest Neighbors 30": KNeighborsClassifier(n_neighbors=30), ###
+    # "Nearest Neighbors 40": KNeighborsClassifier(n_neighbors=40),
 
-    #"RBF SVM" : SVC(gamma=2, C=1),
+    # "Linear SVM" : SVC(kernel="linear", C=0.025),
 
-    #"Gaussian Process" : GaussianProcessClassifier(1.0 * RBF(1.0), warm_start=True),
+    # "RBF SVM" : SVC(gamma=2, C=1),
 
-    "Decision Tree 100": DecisionTreeClassifier(max_depth=100),
-    "Decision Tree 200" : DecisionTreeClassifier(max_depth=200),
-    "Decision Tree 300" : DecisionTreeClassifier(max_depth=300),
-    "Decision Tree 500" : DecisionTreeClassifier(max_depth=500),
+    # "Gaussian Process" : GaussianProcessClassifier(1.0 * RBF(1.0), warm_start=True),
 
-    "Random Forest 100/100" : RandomForestClassifier(max_depth=100, n_estimators=100, max_features='auto'),
-    "Random Forest 100/150" : RandomForestClassifier(max_depth=100, n_estimators=150, max_features='auto'),
-    "Random Forest 100/250" : RandomForestClassifier(max_depth=100, n_estimators=250, max_features='auto'),
-    "Random Forest 200/100" : RandomForestClassifier(max_depth=200, n_estimators=100, max_features='auto'),
-    "Random Forest 200/150" : RandomForestClassifier(max_depth=200, n_estimators=150, max_features='auto'),
-    "Random Forest 200/250" : RandomForestClassifier(max_depth=200, n_estimators=250, max_features='auto'),
-    "Random Forest 300/250" : RandomForestClassifier(max_depth=300, n_estimators=250, max_features='auto'),
-    "Random Forest 300/350": RandomForestClassifier(max_depth=300, n_estimators=350, max_features='auto'),
+    # "Decision Tree 50": DecisionTreeClassifier(max_depth=50),
+    # "Decision Tree 100": DecisionTreeClassifier(max_depth=100),
+    # "Decision Tree 200" : DecisionTreeClassifier(max_depth=200),
+    ### "Decision Tree 300" : DecisionTreeClassifier(max_depth=300), ###
+    # "Decision Tree 400": DecisionTreeClassifier(max_depth=400),
+    # "Decision Tree 500" : DecisionTreeClassifier(max_depth=500),
+    # "Decision Tree 600": DecisionTreeClassifier(max_depth=600),
+    # "Decision Tree 700": DecisionTreeClassifier(max_depth=700),
 
-    "lbfgs NN": MLPClassifier(activation='identity', alpha=0.0001, batch_size='auto', shuffle=True,
+    # "Random Forest 100 with 100 estimators" : RandomForestClassifier(max_depth=100, n_estimators=100, max_features='auto'),
+    # "Random Forest 100 with 150 estimators" : RandomForestClassifier(max_depth=100, n_estimators=150, max_features='auto'),
+    # "Random Forest 100-250" : RandomForestClassifier(max_depth=100, n_estimators=250, max_features='auto'),
+    # "Random Forest 200 with 100 estimators" : RandomForestClassifier(max_depth=200, n_estimators=100, max_features='auto'),
+    ### "Random Forest 200 with 150 estimators" : RandomForestClassifier(max_depth=200, n_estimators=150, max_features='auto'), ###
+    # "Random Forest 200-250" : RandomForestClassifier(max_depth=200, n_estimators=250, max_features='auto'),
+    ### "Random Forest 300-250" : RandomForestClassifier(max_depth=300, n_estimators=250, max_features='auto'), ###
+    # "Random Forest 300 with 350 estimators": RandomForestClassifier(max_depth=300, n_estimators=350, max_features='auto'),
+
+
+    "DNN (lbfgs)": MLPClassifier(activation='identity', alpha=0.11, batch_size='auto', shuffle=True,
                               solver='lbfgs',
                               warm_start=False),
 
-
-    "Default Neural Net" : MLPClassifier(),
+    # "DNN (adam)" : MLPClassifier(),
 
     #"sgd NN" : MLPClassifier(activation='identity', alpha=0.0001, batch_size='auto', shuffle=True,
     #   solver='sgd',
     #   warm_start=False),
 
-    #"AdaBoost 100" : AdaBoostClassifier(n_estimators=100),
+    # "AdaBoost 100" : AdaBoostClassifier(n_estimators=100),
     #"AdaBoost 200" : AdaBoostClassifier(n_estimators=200),
-    #"AdaBoost 300" : AdaBoostClassifier(n_estimators=300),
+    ###"AdaBoost 300" : AdaBoostClassifier(n_estimators=300),
     #"AdaBoost 500" : AdaBoostClassifier(n_estimators=500),
 
     # "Naive Bayes" : GaussianNB(),
@@ -168,6 +179,42 @@ class Classifier():
         print("%s: %s out of %s" % (self.name, self.successful, len(self.predicted)))
         self.results[self.name] = self.get_report()
 
+def create_label_similarity_graph(classifier):
+    weights = []
+    G = nx.Graph()
+    labels = list(classifier.similar_labels.keys())
+
+    name_index = 0
+    similarity_index = 1
+
+    for label_a in labels:
+        for label_b_data in classifier.similar_labels[label_a].most_common(1000):
+            similarity = label_b_data[similarity_index]
+            weights.append(similarity)
+    avg_similarity = float(sum(weights)) / len(weights)
+
+    for label_a in labels:
+        for label_b_data in classifier.similar_labels[label_a].most_common(1000):
+            label_b = label_b_data[name_index]
+            similarity = label_b_data[similarity_index]
+            if similarity > avg_similarity * 1.1:
+                G.add_edge(label_a[::-1], label_b[::-1], weight=similarity)
+
+    all_edges = [(u, v) for (u, v, d) in G.edges(data=True)]
+    all_edges_with_weight = [(u, v, d) for (u, v, d) in G.edges(data=True)]
+
+    filename = "%s label similarity graph" % classifier.name
+    plot_graph(G, all_edges, all_edges_with_weight, filename)
+
+def create_label_mistakes_pie_chart(classifier):
+    labels = [x[::-1] for x in classifier.acknowledged_sources]
+    sizes = []
+    for label in classifier.acknowledged_sources:
+        mistakes = len(classifier.label_failures[label][0])+len(classifier.label_failures[label][1])
+        successes = len(classifier.label_successes[label]) + 1
+        sizes.append(float(mistakes)/successes)
+    filename = "%s label mistakes pie chart" % classifier.name
+    plot_pie_chart(labels, sizes, filename)
 
 class ClassificationData():
     def __init__(self, train_dataset, train_labels, train_references, test_dataset, test_labels, test_references):
@@ -249,6 +296,35 @@ class ParallelClassifiersRunner():
         print("FULL REPORT:")
         sorted_keys = list(results.keys())
         sorted_keys.sort(key=lambda classifier_name: classifiers_runners[classifier_name].classifier.get_successful(), reverse=True)
-        for classifier_name in sorted_keys[:3]:
+
+
+        labels = [classifier_name[::-1] for classifier_name in sorted_keys]
+        labels_data = [int(100*float(classifiers_runners[classifier_name].classifier.get_successful())/float(len(classifiers_runners[classifier_name].classifier.predicted))) for classifier_name in sorted_keys]
+        plot_bar_chart("Classifiers Comparison", labels, labels_data, "Success in percentage", "Successes", "classifiers comparison", labels_std=None)
+
+        label_mistakes = {}
+        for classifier_name in sorted_keys:
             print("\n#####\nClassifier: %s" % classifier_name)
             print("%s" % results[classifier_name])
+            classifier = classifiers_runners[classifier_name].classifier
+            create_label_similarity_graph(classifier)
+            create_label_mistakes_pie_chart(classifier)
+
+            sorted_labels = list(classifier.label_failures.keys())
+            sorted_labels.sort(
+                key=lambda label: (len(classifier.label_failures[label][0]) + len(classifier.label_failures[label][1]) + 1) / (
+                1 + len(classifier.label_successes[label])), reverse=True)
+            for label in sorted_labels:
+                false_positives = len(classifier.label_failures[label][0])
+                false_negatives = len(classifier.label_failures[label][1])
+                successes = len(classifier.label_successes[label])
+                if label not in label_mistakes:
+                    label_mistakes[label] = 0
+                label_mistakes[label] += float(false_positives + false_negatives) / (successes + 1)
+        sorted_labels = list(label_mistakes.keys())
+        sorted_labels.sort(key=lambda label: label_mistakes[label], reverse=True)
+        print("Total (all-run) labels mistakes:")
+        for label in sorted_labels:
+            print("%s: %d mistakes" % (label, label_mistakes[label]))
+
+

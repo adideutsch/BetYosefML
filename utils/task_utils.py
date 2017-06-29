@@ -1,6 +1,6 @@
 import functools, pickle, os.path, time, hashlib
 
-CACHE_FILENAME = "parsing_cache_%s.pickle"
+CACHE_FILENAME = "cache/parsing_cache_%s.pickle"
 
 
 class TimeCounter():
